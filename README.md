@@ -1,5 +1,7 @@
 ![](https://github.com/Lupennat/nova-nested-many/blob/main/demo.gif)
 
+> This fork targets Laravel Nova 5.
+
 1. [Requirements](#Requirements)
 2. [Installation](#Installation)
 3. [Usage](#Usage)
@@ -26,18 +28,19 @@
 ## Requirements
 
 -   `php: ^7.4 | ^8`
--   `laravel/nova: ^4`
+-   `laravel/nova: ^5`
 
 ## Installation
 
 ```
-composer require lupennat/nova-nested-many:^2.0
+composer require mazenelmasry/nova5-nested-many5
 ```
 
 | NOVA     | PACKAGE |
 | -------- | ------- |
 | <4.29.5  | 1.x     |
-| >4.29.6  | 2.x     |
+| 4.29.6   | 2.x     |
+| 5.x      | 2.x (this fork) |
 
 ## Usage
 
