@@ -22,4 +22,19 @@ trait QueriesResources
                 $this->viaResourceId
             )->{$this->viaRelationship}();
     }
+
+    public function nestedField()
+    {
+        if (!$this->viaRelationship()) {
+            return null;
+        }
+
+        $resource = $this->newViaResource();
+        $fields = $resource->availableFields($this);
+
+        return collect($fields)->first(function ($field) {
+            return $field instanceof \Lupennat\NestedMany\Fields\Nested
+                && $field->attribute === $this->viaRelationship();
+        });
+    }
 }

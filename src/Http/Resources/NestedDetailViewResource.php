@@ -17,10 +17,21 @@ class NestedDetailViewResource extends Resource implements NestedResourceRequest
     public function toArray($request)
     {
         $resource = $request->resource();
+        $resources = $request->newQuery()->get();
+
+        if (method_exists($request, 'nestedField')) {
+            $nestedField = $request->nestedField();
+
+            if ($nestedField && is_callable($nestedField->resourcesFilter)) {
+                $resources = $resources->filter(
+                    fn ($model) => ($nestedField->resourcesFilter)($model, $request)
+                );
+            }
+        }
 
         return [
             'label' => $resource::label(),
-            'resources' => $request->newQuery()->get()->mapInto($resource)->map->serializeForNestedDetail($request),
+            'resources' => $resources->mapInto($resource)->map->serializeForNestedDetail($request),
         ];
     }
 }

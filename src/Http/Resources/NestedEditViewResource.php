@@ -19,9 +19,20 @@ class NestedEditViewResource extends Resource
 
         $request['editing'] = 'true';
         $request['editMode'] = 'update';
+        $resources = $request->newQuery()->get();
+
+        if (method_exists($request, 'nestedField')) {
+            $nestedField = $request->nestedField();
+
+            if ($nestedField && is_callable($nestedField->resourcesFilter)) {
+                $resources = $resources->filter(
+                    fn ($model) => ($nestedField->resourcesFilter)($model, $request)
+                );
+            }
+        }
 
         return [
-            'resources' => $request->newQuery()->get()->mapInto($resource)->map(function ($resource, $index) use ($request) {
+            'resources' => $resources->mapInto($resource)->map(function ($resource, $index) use ($request) {
                 return $resource->serializeForNestedUpdate($request, $index);
             }),
         ];
