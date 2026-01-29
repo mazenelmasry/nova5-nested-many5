@@ -28,6 +28,17 @@ class NestedDetailViewResource extends Resource implements NestedResourceRequest
                 );
             }
         }
+        if (method_exists($request, 'viaResource')) {
+            $viaResource = $request->viaResource();
+
+            if ($viaResource && method_exists($viaResource, 'filterNestedResources')) {
+                $resources = $viaResource::filterNestedResources(
+                    $request,
+                    (string) $request->viaRelationship(),
+                    $resources
+                );
+            }
+        }
 
         return [
             'label' => $resource::label(),

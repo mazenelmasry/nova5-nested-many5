@@ -30,6 +30,17 @@ class NestedEditViewResource extends Resource
                 );
             }
         }
+        if (method_exists($request, 'viaResource')) {
+            $viaResource = $request->viaResource();
+
+            if ($viaResource && method_exists($viaResource, 'filterNestedResources')) {
+                $resources = $viaResource::filterNestedResources(
+                    $request,
+                    (string) $request->viaRelationship(),
+                    $resources
+                );
+            }
+        }
 
         return [
             'resources' => $resources->mapInto($resource)->map(function ($resource, $index) use ($request) {
