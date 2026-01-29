@@ -15,11 +15,11 @@ use Lupennat\NestedMany\Models\Contracts\Nestable;
 
 abstract class Nested extends Field implements BehavesAsPanel, RelatableField
 {
-    use SupportsDependentFields;
     use Collapsable;
     use NestedPropagable;
-    use NestedStorable;
     use NestedRecursive;
+    use NestedStorable;
+    use SupportsDependentFields;
 
     /**
      * Determines whether the children should be collapsed by default.
@@ -39,7 +39,7 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
     /**
      * Active Child.
      */
-    public int|null $active = 0;
+    public ?int $active = 0;
 
     /**
      * Active Title Child.
@@ -57,6 +57,13 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
      * Default children overwrite existings children.
      */
     public bool $defaultChildrenOverwrite = false;
+
+    /**
+     * Filter callback for related resources.
+     *
+     * @var callable|null
+     */
+    public $resourcesFilter = null;
 
     /**
      * Mandatory Fields before create.
@@ -126,11 +133,11 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
      *
      * @return $this
      */
-    public function active(int|null $active = 0)
+    public function active(?int $active = 0)
     {
         $this->active = $active;
 
-        if (!is_null($this->active)) {
+        if (! is_null($this->active)) {
             $this->activeTitle = null;
         }
 
@@ -142,11 +149,11 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
      *
      * @return $this
      */
-    public function activeTitle(string|int $activeTitle = null)
+    public function activeTitle(string|int|null $activeTitle = null)
     {
         $this->activeTitle = $activeTitle;
 
-        if (!is_null($this->activeTitle)) {
+        if (! is_null($this->activeTitle)) {
             $this->active = null;
         }
 
@@ -169,7 +176,6 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
      * Define default Children data.
      *
      * @param array<array<string<mixed>|\Illuminate\Database\Model>|(callable(\Laravel\Nova\Http\Requests\NovaRequest): (array<array<string<mixed>|\Illuminate\Database\Model>))
-     *
      * @return $this
      */
     public function defaultChildren($children, $overwrite = false)
@@ -184,12 +190,23 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
      * Define Mandatory Fields Before Create.
      *
      * @param array<string>
-     *
      * @return $this
      */
     public function hideFields(array $fields)
     {
         $this->hiddenFields = $fields;
+
+        return $this;
+    }
+
+    /**
+     * Filter related resources before serialization.
+     *
+     * @return $this
+     */
+    public function filterResources(callable $callback)
+    {
+        $this->resourcesFilter = $callback;
 
         return $this;
     }
@@ -209,8 +226,7 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
     /**
      * set min children.
      *
-     * @param int|null $min
-     *
+     * @param  int|null  $min
      * @return $this
      */
     public function min($min = null)
@@ -223,8 +239,7 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
     /**
      * set max children.
      *
-     * @param int|null $max
-     *
+     * @param  int|null  $max
      * @return $this
      */
     public function max($max = null)
@@ -247,7 +262,7 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
     /**
      * Determine if the field should be for the given request.
      *
-     * @param \Laravel\Nova\Http\Requests\NovaRequest $request
+     * @param  \Laravel\Nova\Http\Requests\NovaRequest  $request
      */
     protected function authorizedToRelate(Request $request): bool
     {
@@ -269,7 +284,7 @@ abstract class Nested extends Field implements BehavesAsPanel, RelatableField
     protected function validateNestableModel()
     {
         $model = $this->resourceClass::newModel();
-        if (!($model instanceof Nestable)) {
+        if (! ($model instanceof Nestable)) {
             throw new NotNestableModelException($model);
         }
     }

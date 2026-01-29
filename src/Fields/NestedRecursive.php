@@ -38,7 +38,7 @@ trait NestedRecursive
                     'viaRelationship' => $this->attribute,
                 ]));
 
-                $resources = (new NestedController())->updateResources($updateRequest)->getData(true)['resources'] ?? [];
+                $resources = (new NestedController)->updateResources($updateRequest)->getData(true)['resources'] ?? [];
 
                 $request->route()->setParameter('resource', $oldResourceName);
             }
@@ -56,6 +56,14 @@ trait NestedRecursive
         $resources = [];
 
         foreach ($resource->getRelations() as $name => $relatedResources) {
+            if (is_callable($this->resourcesFilter)) {
+                $relatedResources = collect($relatedResources)
+                    ->filter(fn ($relatedResource) => ($this->resourcesFilter)($relatedResource, $request))
+                    ->values();
+            } else {
+                $relatedResources = collect($relatedResources);
+            }
+
             $oldResourceName = $request->route('resource');
             $request->route()->setParameter('resource', $this->resourceName);
 
@@ -69,14 +77,14 @@ trait NestedRecursive
 
             $resourceClass = $updateRequest->resource();
 
-            $resources = collect($relatedResources)->mapInto($resourceClass)->map(function ($resource) use ($updateRequest) {
+            $resources = $relatedResources->mapInto($resourceClass)->map(function ($resource) use ($updateRequest) {
                 $updateRequest['editing'] = 'true';
-                $updateRequest['editMode'] = !$resource->resource->exists && !$resource->resource->isNestedDefault() ? 'create' : 'update';
+                $updateRequest['editMode'] = ! $resource->resource->exists && ! $resource->resource->isNestedDefault() ? 'create' : 'update';
                 $updateRequest['nestedManagedByParent'] = 'true';
 
                 // readonly is resolved using app request on jsonserialize
                 // we need to serialize for each element that way editMode is preserved
-                return json_decode(json_encode(!$resource->resource->exists && !$resource->resource->isNestedDefault() ?
+                return json_decode(json_encode(! $resource->resource->exists && ! $resource->resource->isNestedDefault() ?
                 $resource->serializeForNestedCreate($updateRequest) :
                 $resource->serializeForNestedUpdate($updateRequest)), true);
             })->toArray();
@@ -153,7 +161,7 @@ trait NestedRecursive
 
                 $request->route()->setParameter('resource', $resourceName);
 
-                if (!$resourceId) {
+                if (! $resourceId) {
                     $request->route()->forgetParameter('resourceId');
                 } else {
                     $request->route()->setParameter('resourceId', $resourceId);
@@ -168,7 +176,7 @@ trait NestedRecursive
                 $callback($updateRequest);
                 $request->route()->setParameter('resource', $oldResourceName);
 
-                if (!$oldResourceId) {
+                if (! $oldResourceId) {
                     $request->route()->forgetParameter('resourceId');
                 } else {
                     $request->route()->setParameter('resourceId', $oldResourceId);
