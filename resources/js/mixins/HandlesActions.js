@@ -47,6 +47,8 @@ export default {
         },
 
         runAction(event, resources = []) {
+            if (this.runningActionKey) return;
+
             this.selectedResources = resources;
             this.selectedActionKey = event;
 
@@ -83,6 +85,8 @@ export default {
          * Execute the selected action.
          */
         executeAction() {
+            if (this.runningActionKey) return;
+
             this.runningActionKey = this.selectedActionKey;
             this.actionErrors = new Errors();
             Nova.$progress.start();
