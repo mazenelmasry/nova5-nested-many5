@@ -266,8 +266,12 @@ trait NestedStorable
     public function fillInto(NovaRequest $request, object $model, string $attribute, ?string $requestAttribute = null)
     {
         if (!$model->exists) {
-            $model::created(function ($model) use ($request, $requestAttribute, $attribute) {
-                $this->fillInto($request, $model, $attribute, $requestAttribute);
+            $targetObjectId = spl_object_id($model);
+            $model::created(function ($createdModel) use ($request, $requestAttribute, $attribute, $targetObjectId) {
+                if (spl_object_id($createdModel) !== $targetObjectId) {
+                    return;
+                }
+                $this->fillInto($request, $createdModel, $attribute, $requestAttribute);
             });
         } else {
             if (is_callable($this->beforeFillCallback)) {
