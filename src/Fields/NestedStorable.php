@@ -280,6 +280,12 @@ trait NestedStorable
 
             $resourceClass = $this->resourceClass;
 
+            \Illuminate\Support\Facades\Log::info('[NESTED] raw incoming', [
+                'field' => $this->attribute,
+                'parent' => $model::class.'#'.$model->getKey(),
+                'rawInput' => $request->input($this->attribute),
+            ]);
+
             $children = NestedChildrenHelper::getNestedChildrenModelAttributes($request, $this->attribute, $resourceClass);
 
             $keyName = $this->resourceClass::newModel()->getKeyName();
@@ -291,6 +297,18 @@ trait NestedStorable
                 ->values();
 
             $childrenToDelete = $model->{$this->relationshipName()}()->whereNotIn($keyName, $keys)->pluck($keyName)->toArray();
+
+            \Illuminate\Support\Facades\Log::info('[NESTED] fillInto', [
+                'field' => $this->attribute,
+                'parent' => $model::class.'#'.$model->getKey(),
+                'submittedKeys' => $keys->all(),
+                'toDelete' => $childrenToDelete,
+                'childrenDecisions' => collect($children)->map(fn ($c) => [
+                    'exists' => $c['model']->exists,
+                    'key' => $c['model']->getKey(),
+                    'attrs' => array_keys($c['attributes']),
+                ])->all(),
+            ]);
 
             $viaResource = $request->route('resource');
             $viaResourceId = $request->route('resourceId');
@@ -375,7 +393,28 @@ trait NestedStorable
 
         $updateRequest->files->replace($request->file("{$this->attribute}.{$index}", []));
 
-        return (new ResourceUpdateController())->__invoke($updateRequest);
+        try {
+            $result = (new ResourceUpdateController())->__invoke($updateRequest);
+            \Illuminate\Support\Facades\Log::info('[NESTED] updateChild OK', [
+                'resource' => $this->resourceName,
+                'id' => $child['model']->getKey(),
+                'sentAttrs' => $child['attributes'],
+            ]);
+
+            return $result;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[NESTED] updateChild FAILED', [
+                'resource' => $this->resourceName,
+                'id' => $child['model']->getKey(),
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+                'origin' => $e->getFile().':'.$e->getLine(),
+                'trace' => collect($e->getTrace())->take(8)->map(fn ($t) => ($t['class'] ?? '').($t['type'] ?? '').($t['function'] ?? '').' @ '.basename($t['file'] ?? '?').':'.($t['line'] ?? '?'))->all(),
+                'errors' => method_exists($e, 'errors') ? $e->errors() : null,
+            ]);
+
+            throw $e;
+        }
     }
 
     /**
