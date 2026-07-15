@@ -2,6 +2,10 @@
 
 namespace Lupennat\NestedMany\Fields;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Laravel\Nova\Fields\BelongsTo;
 use Laravel\Nova\Fields\BelongsToMany;
 use Laravel\Nova\Fields\MorphTo;
@@ -12,6 +16,7 @@ use Laravel\Nova\Http\Requests\CreateResourceRequest;
 use Laravel\Nova\Http\Requests\DeleteResourceRequest;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Http\Requests\UpdateResourceRequest;
+use Laravel\Nova\Resource;
 use Laravel\Nova\Util;
 use Lupennat\NestedMany\NestedChildrenHelper;
 
@@ -20,22 +25,21 @@ trait NestedStorable
     /**
      * Before fill Callback.
      *
-     * @var (\Closure(\Illuminate\Database\Eloquent\Model, Laravel\Nova\Http\Requests\NovaRequest):(void))
+     * @var (\Closure(Model, Laravel\Nova\Http\Requests\NovaRequest):(void))
      */
     public $beforeFillCallback;
 
     /**
      * After fill Callback.
      *
-     * @var (\Closure(\Illuminate\Database\Eloquent\Model, Laravel\Nova\Http\Requests\NovaRequest):(void))
+     * @var (\Closure(Model, Laravel\Nova\Http\Requests\NovaRequest):(void))
      */
     public $afterFillCallback;
 
     /**
      * Before Fill Hook.
      *
-     * @param (\Closure(\Illuminate\Database\Eloquent\Model, Laravel\Nova\Http\Requests\NovaRequest):(void)) $callback
-     *
+     * @param  (\Closure(Model, Laravel\Nova\Http\Requests\NovaRequest):(void))  $callback
      * @return $this
      */
     public function beforeFill($callback)
@@ -48,8 +52,7 @@ trait NestedStorable
     /**
      * After Fill Hook.
      *
-     * @param (\Closure(\Illuminate\Database\Eloquent\Model, Laravel\Nova\Http\Requests\NovaRequest):(void)) $callback
-     *
+     * @param  (\Closure(Model, Laravel\Nova\Http\Requests\NovaRequest):(void))  $callback
      * @return $this
      */
     public function afterFill($callback)
@@ -100,7 +103,7 @@ trait NestedStorable
     /**
      * Get the creation rules for this field.
      *
-     * @return array<string, array<int, string|\Illuminate\Validation\Rule|\Illuminate\Contracts\Validation\Rule|callable>>
+     * @return array<string, array<int, string|Rule|\Illuminate\Contracts\Validation\Rule|callable>>
      */
     public function getCreationRules(NovaRequest $request): array
     {
@@ -110,7 +113,7 @@ trait NestedStorable
     /**
      * Get the update rules for this field.
      *
-     * @return array<string, array<int, string|\Illuminate\Validation\Rule|\Illuminate\Contracts\Validation\Rule|callable>>
+     * @return array<string, array<int, string|Rule|\Illuminate\Contracts\Validation\Rule|callable>>
      */
     public function getUpdateRules(NovaRequest $request): array
     {
@@ -120,7 +123,7 @@ trait NestedStorable
     /**
      * Get the available rules for this field.
      *
-     * @return array<string, array<int, string|\Illuminate\Validation\Rule|\Illuminate\Contracts\Validation\Rule|callable>>
+     * @return array<string, array<int, string|Rule|\Illuminate\Contracts\Validation\Rule|callable>>
      */
     protected function getAvailableValidationRules(NovaRequest $request)
     {
@@ -146,9 +149,8 @@ trait NestedStorable
     /**
      * Get the creation rules for this field.
      *
-     * @param \Laravel\Nova\Resource $resource
-     *
-     * @return array<string, array<int, string|\Illuminate\Validation\Rule|\Illuminate\Contracts\Validation\Rule|callable>>
+     * @param  \Laravel\Nova\Resource  $resource
+     * @return array<string, array<int, string|Rule|\Illuminate\Contracts\Validation\Rule|callable>>
      */
     public function getResourceCreationRules(int $index, NovaRequest $request, $resource)
     {
@@ -170,7 +172,7 @@ trait NestedStorable
             })
             ->mapWithKeys(function ($rules, $attribute) use ($replacements, $index) {
                 if ($this->nullable === true) {
-                    array_push($field, 'sometimes');
+                    array_push($rules, 'sometimes');
                 }
 
                 return ["{$this->attribute}.{$index}.{$attribute}" => collect($rules)->transform(function ($rule) use ($replacements) {
@@ -190,9 +192,8 @@ trait NestedStorable
     /**
      * Get the update rules for this resource fields.
      *
-     * @param \Laravel\Nova\Resource $resource
-     *
-     * @return array<string, array<int, string|\Illuminate\Validation\Rule|\Illuminate\Contracts\Validation\Rule|callable>>
+     * @param  \Laravel\Nova\Resource  $resource
+     * @return array<string, array<int, string|Rule|\Illuminate\Contracts\Validation\Rule|callable>>
      */
     public function getResourceUpdateRules(int $index, NovaRequest $request, $resource)
     {
@@ -216,12 +217,12 @@ trait NestedStorable
 
                 return $field->getUpdateRules($request);
             })
-            ->mapWithKeys(function ($field, $attribute) use ($replacements, $index) {
+            ->mapWithKeys(function ($rules, $attribute) use ($replacements, $index) {
                 if ($this->nullable === true) {
-                    array_push($field, 'sometimes');
+                    array_push($rules, 'sometimes');
                 }
 
-                return ["{$this->attribute}.{$index}.{$attribute}" => collect($field)->transform(function ($rule) use ($replacements) {
+                return ["{$this->attribute}.{$index}.{$attribute}" => collect($rules)->transform(function ($rule) use ($replacements) {
                     if (empty($replacements)) {
                         return $rule;
                     }
@@ -257,74 +258,59 @@ trait NestedStorable
     /**
      * Hydrate the given attribute on the model based on the incoming request.
      *
-     * @param object      $model
-     * @param string      $attribute
-     * @param string|null $requestAttribute
      *
      * @return (\Closure():(void))|null
      */
     public function fillInto(NovaRequest $request, object $model, string $attribute, ?string $requestAttribute = null)
     {
-        if (!$model->exists) {
-            $targetObjectId = spl_object_id($model);
-            $model::created(function ($createdModel) use ($request, $requestAttribute, $attribute, $targetObjectId) {
-                if (spl_object_id($createdModel) !== $targetObjectId) {
-                    return;
-                }
-                $this->fillInto($request, $createdModel, $attribute, $requestAttribute);
-            });
-        } else {
-            if (is_callable($this->beforeFillCallback)) {
-                call_user_func($this->beforeFillCallback, $model, $request);
+        if (! $model->exists) {
+            return function () use ($request, $model, $attribute, $requestAttribute): void {
+                $this->fillInto($request, $model, $attribute, $requestAttribute);
+            };
+        }
+
+        if (is_callable($this->beforeFillCallback)) {
+            call_user_func($this->beforeFillCallback, $model, $request);
+        }
+
+        $resourceClass = $this->resourceClass;
+
+        if (! $this->nestedRelationWasSubmitted($request)) {
+            if (is_callable($this->afterFillCallback)) {
+                call_user_func($this->afterFillCallback, $model, $request);
             }
 
-            $resourceClass = $this->resourceClass;
+            return;
+        }
 
-            \Illuminate\Support\Facades\Log::info('[NESTED] raw incoming', [
-                'field' => $this->attribute,
-                'parent' => $model::class.'#'.$model->getKey(),
-                'rawInput' => $request->input($this->attribute),
-            ]);
+        $children = NestedChildrenHelper::getNestedChildrenModelAttributes($request, $this->attribute, $resourceClass, false, $model, $this->relationshipName());
 
-            $children = NestedChildrenHelper::getNestedChildrenModelAttributes($request, $this->attribute, $resourceClass);
+        $keyName = $this->resourceClass::newModel()->getKeyName();
 
-            $keyName = $this->resourceClass::newModel()->getKeyName();
+        $keys = collect($children)->map(function ($child) {
+            return $child['model']->getKey();
+        })
+            ->reject(fn ($key) => ! $key)
+            ->values();
 
-            $keys = collect($children)->map(function ($child) {
-                return $child['model']->getKey();
-            })
-                ->reject(fn ($key) => !$key)
-                ->values();
+        $childrenToDelete = $model->{$this->relationshipName()}()->whereNotIn($keyName, $keys)->pluck($keyName)->toArray();
 
-            $childrenToDelete = $model->{$this->relationshipName()}()->whereNotIn($keyName, $keys)->pluck($keyName)->toArray();
+        $viaResource = $request->route('resource');
+        $viaResourceId = $request->route('resourceId');
 
-            \Illuminate\Support\Facades\Log::info('[NESTED] fillInto', [
-                'field' => $this->attribute,
-                'parent' => $model::class.'#'.$model->getKey(),
-                'submittedKeys' => $keys->all(),
-                'toDelete' => $childrenToDelete,
-                'childrenDecisions' => collect($children)->map(fn ($c) => [
-                    'exists' => $c['model']->exists,
-                    'key' => $c['model']->getKey(),
-                    'attrs' => array_keys($c['attributes']),
-                ])->all(),
-            ]);
+        $relatedFields = (new $resourceClass)
+            ->availableFields($request)
+            ->filter($this->rejectRecursiveRelatedResourceFields($request))
+            ->values();
 
-            $viaResource = $request->route('resource');
-            $viaResourceId = $request->route('resourceId');
+        $viaRelationship = $this->attribute;
 
-            $relatedFields = (new $resourceClass())
-                ->availableFields($request)
-                ->filter($this->rejectRecursiveRelatedResourceFields($request))
-                ->values();
+        $request->route()->setParameter('resource', $this->resourceName);
+        $request->route()->forgetParameter('resourceId');
 
-            $viaRelationship = $this->attribute;
+        $newRequest = NovaRequest::createFrom($request);
 
-            $request->route()->setParameter('resource', $this->resourceName);
-            $request->route()->forgetParameter('resourceId');
-
-            $newRequest = NovaRequest::createFrom($request);
-
+        DB::connection($model->getConnectionName())->transaction(function () use ($newRequest, $model, $children, $childrenToDelete, $relatedFields, $viaResource, $viaRelationship): void {
             $this->deleteChildren($newRequest, $childrenToDelete);
 
             foreach ($children as $index => $child) {
@@ -332,20 +318,70 @@ trait NestedStorable
                     $child['attributes'][$field->attribute] = $model->getKey();
                 }
 
-                if ($child['model']->exists) {
-                    $this->updateChild($newRequest, $model, $child, $index, $viaResource, $viaRelationship);
-                } else {
-                    $this->createChild($newRequest, $model, $child, $index, $viaResource, $viaRelationship);
+                try {
+                    if ($child['model']->exists) {
+                        $this->updateChild($newRequest, $model, $child, $index, $viaResource, $viaRelationship);
+                    } else {
+                        $this->createChild($newRequest, $model, $child, $index, $viaResource, $viaRelationship);
+                    }
+                } catch (\Throwable $e) {
+                    throw $this->remapNestedChildException($e, $index);
                 }
             }
+        });
 
-            $request->route()->setParameter('resource', $viaResource);
-            $request->route()->setParameter('resourceId', $viaResourceId);
+        $request->route()->setParameter('resource', $viaResource);
+        $request->route()->setParameter('resourceId', $viaResourceId);
 
-            if (is_callable($this->afterFillCallback)) {
-                call_user_func($this->afterFillCallback, $model, $request);
-            }
+        if (is_callable($this->afterFillCallback)) {
+            call_user_func($this->afterFillCallback, $model, $request);
         }
+    }
+
+    /**
+     * Determine whether the nested relation was part of the submitted request.
+     *
+     * Distinguishes an explicitly submitted (possibly empty) payload from a
+     * relation that was not sent at all (JS error/race/malformed payload).
+     * The frontend always appends a presence marker for a rendered field, so a
+     * missing array *and* missing marker means "not submitted" — never delete.
+     */
+    protected function nestedRelationWasSubmitted(NovaRequest $request): bool
+    {
+        return is_array($request->input($this->attribute))
+            || $request->has($this->attribute.'___nestedSubmitted');
+    }
+
+    /**
+     * Remap a nested child exception's validation keys to the parent form path.
+     *
+     * Child create/update controllers raise validation errors keyed by the
+     * child's own attributes (e.g. `product`). Re-key them under this level's
+     * relative path (`{attribute}.{index}.{childKey}`) so the UI can surface the
+     * failure on the right field instead of showing an opaque error.
+     *
+     * The remap fires at every nesting level as the exception bubbles up, so
+     * each level must prepend only its OWN relative segment — the full form
+     * path (e.g. `trays.0.items.0.product`) is built by composition. Using an
+     * already-absolute prefix here would double-count the outer segments.
+     */
+    protected function remapNestedChildException(\Throwable $e, int $index): \Throwable
+    {
+        if (! $e instanceof ValidationException) {
+            return $e;
+        }
+
+        $prefix = "{$this->attribute}.{$index}.";
+
+        $remapped = [];
+        foreach ($e->errors() as $key => $messages) {
+            $remapped[$prefix.$key] = $messages;
+        }
+
+        $exception = ValidationException::withMessages($remapped);
+        $exception->status = $e->status;
+
+        return $exception;
     }
 
     /**
@@ -368,7 +404,7 @@ trait NestedStorable
 
         $createRequest->files->replace($request->file("{$this->attribute}.{$index}", []));
 
-        return (new ResourceStoreController())->__invoke($createRequest);
+        return (new ResourceStoreController)->__invoke($createRequest);
     }
 
     /**
@@ -393,28 +429,7 @@ trait NestedStorable
 
         $updateRequest->files->replace($request->file("{$this->attribute}.{$index}", []));
 
-        try {
-            $result = (new ResourceUpdateController())->__invoke($updateRequest);
-            \Illuminate\Support\Facades\Log::info('[NESTED] updateChild OK', [
-                'resource' => $this->resourceName,
-                'id' => $child['model']->getKey(),
-                'sentAttrs' => $child['attributes'],
-            ]);
-
-            return $result;
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('[NESTED] updateChild FAILED', [
-                'resource' => $this->resourceName,
-                'id' => $child['model']->getKey(),
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
-                'origin' => $e->getFile().':'.$e->getLine(),
-                'trace' => collect($e->getTrace())->take(8)->map(fn ($t) => ($t['class'] ?? '').($t['type'] ?? '').($t['function'] ?? '').' @ '.basename($t['file'] ?? '?').':'.($t['line'] ?? '?'))->all(),
-                'errors' => method_exists($e, 'errors') ? $e->errors() : null,
-            ]);
-
-            throw $e;
-        }
+        return (new ResourceUpdateController)->__invoke($updateRequest);
     }
 
     /**
@@ -433,7 +448,7 @@ trait NestedStorable
                 ])
             );
 
-            return (new ResourceDestroyController())->__invoke($deleteRequest);
+            return (new ResourceDestroyController)->__invoke($deleteRequest);
         }
     }
 }
