@@ -68,6 +68,13 @@ export default {
             for (const key in this.nestedPropagated) {
                 formData.append(key, this.nestedPropagated[key]);
             }
+
+            // Presence marker: always sent for a rendered nested field, even when
+            // it has zero children. Lets the backend distinguish an intentionally
+            // emptied relation (delete all) from one that was never submitted
+            // (JS error/race), which must never trigger a catastrophic delete.
+            formData.append(`${attribute}___nestedSubmitted`, '1');
+
             let formIndex = 0;
             _.each(resources, (resource, index) => {
                 if (!resource.loading) {
