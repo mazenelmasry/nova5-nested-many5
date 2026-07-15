@@ -56,6 +56,14 @@ trait NestedRecursive
         $resources = [];
 
         foreach ($resource->getRelations() as $name => $relatedResources) {
+            // Only process this field's own relation. The parent model may carry
+            // other eager-loaded relations (e.g. a belongsTo like `product`);
+            // treating those as nested children would collect() a single model
+            // into its scalar attributes and crash on `$resource->resource->exists`.
+            if ($name !== $this->attribute) {
+                continue;
+            }
+
             if (is_callable($this->resourcesFilter)) {
                 $relatedResources = collect($relatedResources)
                     ->filter(fn ($relatedResource) => ($this->resourcesFilter)($relatedResource, $request))
