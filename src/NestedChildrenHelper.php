@@ -20,26 +20,22 @@ class NestedChildrenHelper
      * Get Nested children model and attributes from request.
      *
      * @param class-string<\Laravel\Nova\Resource>
-     *
      * @return array<int,array>
      */
-    public static function getNestedChildrenModelAttributes(NovaRequest $request, string $attribute, string $resourceClass, bool $withRelations = false)
+    public static function getNestedChildrenModelAttributes(NovaRequest $request, string $attribute, string $resourceClass, bool $withRelations = false, $parentModel = null, ?string $relationshipName = null)
     {
         $children = static::nestedChildrenFromRequest($request, $attribute, $resourceClass);
 
-        return static::generateNestedChildrenModelAttributes($children, $resourceClass, $withRelations);
-
-
+        return static::generateNestedChildrenModelAttributes($children, $resourceClass, $withRelations, $parentModel, $relationshipName);
     }
 
     /**
- * Generate Nested children model and attributes from children.
+     * Generate Nested children model and attributes from children.
      *
-     * @param array<int,array<string,mixed>> $children
-     *
+     * @param  array<int,array<string,mixed>>  $children
      * @return array<int,array>
      */
-    protected static function generateNestedChildrenModelAttributes($children, string $resourceClass, bool $withRelations)
+    protected static function generateNestedChildrenModelAttributes($children, string $resourceClass, bool $withRelations, $parentModel = null, ?string $relationshipName = null)
     {
         $nestedChildrenResources = [];
 
@@ -56,7 +52,9 @@ class NestedChildrenHelper
         $existingResources = collect([]);
 
         if (count($primarayKeyValues)) {
-            $existingResources = $resourceClass::$model::whereIn($primaryKey, $primarayKeyValues)->get();
+            $existingResources = ($parentModel !== null && $relationshipName !== null && method_exists($parentModel, $relationshipName))
+                ? $parentModel->{$relationshipName}()->whereIn($primaryKey, $primarayKeyValues)->get()
+                : $resourceClass::$model::whereIn($primaryKey, $primarayKeyValues)->get();
         }
 
         foreach ($children as $child) {
@@ -74,7 +72,7 @@ class NestedChildrenHelper
                             'resourceClass' => $options['resourceClass'],
                             'resourceName' => $options['resourceName'],
                             'relationShip' => $options['relationShip'],
-                            'children' => []
+                            'children' => [],
                         ];
                         $relations[$attribute]['children'] = array_key_exists($attribute, $child) ? static::generateNestedChildrenModelAttributes((array) $child[$attribute], $options['resourceClass'], true) : [];
                     }
@@ -82,11 +80,10 @@ class NestedChildrenHelper
                 unset($child['nestedManyFields']);
             }
 
-
             $nestedChildrenResources[] = [
                 'model' => $model,
                 'attributes' => $child,
-                'relations' => $relations
+                'relations' => $relations,
             ];
         }
 
